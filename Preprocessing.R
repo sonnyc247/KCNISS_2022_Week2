@@ -45,7 +45,47 @@ write.csv(Homologous_genes_mouhum, "./Homologous_genes_mouhum.csv")
 
 Hom_genes_filtered = Homologous_genes_mouhum[Homologous_genes_mouhum$One_to_one == T,] 
 
+#
+#### raw data ####
 
+# metadata
+hum_meta <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Public/AIBS_scRNAseq_2019/human/metadata.csv")
+mou_meta <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Public/AIBS_scRNAseq_2019/mouse/2020_10_24/metadata.csv")
 
+hum_meta <- hum_meta[, intersect(colnames(hum_meta), colnames(mou_meta))]
+mou_meta <- mou_meta[, intersect(colnames(hum_meta), colnames(mou_meta))]
 
+hum_meta$species <- "human"
+mou_meta$species <- "mouse"
 
+hum_meta <- hum_meta[hum_meta$outlier_call == "False",]
+mou_meta <- mou_meta[mou_meta$outlier_call == "False",]
+
+write.csv(hum_meta, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/AIBS_human_meta.csv")
+write.csv(mou_meta, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/AIBS_mouse_meta.csv")
+
+# count matrices
+hum_counts <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Public/AIBS_scRNAseq_2019/human/matrix.csv", row.names = 1)
+mou_counts <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Public/AIBS_scRNAseq_2019/mouse/2020_10_24/matrix.csv", row.names = 1)
+
+hum_counts <- hum_counts[hum_counts$sample_name %in% hum_meta$sample_name,]
+hum_counts <- hum_counts[hum_counts$sample_name %in% hum_meta$sample_name,]
+
+Hom_genes_filtered <- Hom_genes_filtered[Hom_genes_filtered$MGI.symbol %in% colnames(mou_counts),]
+Hom_genes_filtered <- Hom_genes_filtered[Hom_genes_filtered$HGNC.symbol %in% colnames(hum_counts),]
+
+hum_counts <- hum_counts[,intersect(colnames(hum_counts), Hom_genes_filtered$HGNC.symbol)]
+write.csv(hum_counts, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/AIBS_human_counts.csv")
+
+mou_counts <- mou_counts[,intersect(colnames(mou_counts), Hom_genes_filtered$MGI.symbol)]
+write.csv(mou_counts, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/AIBS_mouse_counts.csv")
+
+#### Seurat object ####
+
+row.names(hum_meta) <- hum_meta$sample_name
+Seu_hum <- CreateSeuratObject(counts = t(hum_counts), meta.data = hum_meta)
+saveRDS(Seu_hum, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/Seu_hum.rds")
+
+row.names(mou_meta) <- mou_meta$sample_name
+Seu_mou <- CreateSeuratObject(counts = t(mou_counts), meta.data = mou_meta)
+saveRDS(Seu_mou, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/Seu_mou.rds")
