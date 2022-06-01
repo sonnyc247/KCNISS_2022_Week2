@@ -1,5 +1,6 @@
 library(Seurat)
 library(biomaRt)
+library(dplyr)
 
 #### gene homology (modified from https://www.r-bloggers.com/2016/10/converting-mouse-to-human-gene-names-with-biomart-package/) ####
 
@@ -69,10 +70,11 @@ hum_counts <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Public/AIBS_scRN
 mou_counts <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Public/AIBS_scRNAseq_2019/mouse/2020_10_24/matrix.csv", row.names = 1)
 
 hum_counts <- hum_counts[hum_counts$sample_name %in% hum_meta$sample_name,]
-hum_counts <- hum_counts[hum_counts$sample_name %in% hum_meta$sample_name,]
+mou_counts <- mou_counts[mou_counts$sample_name %in% mou_meta$sample_name,]
 
 Hom_genes_filtered <- Hom_genes_filtered[Hom_genes_filtered$MGI.symbol %in% colnames(mou_counts),]
 Hom_genes_filtered <- Hom_genes_filtered[Hom_genes_filtered$HGNC.symbol %in% colnames(hum_counts),]
+write.csv(Hom_genes_filtered, "./Homologous_genes_mouhum_filtered.csv")
 
 hum_counts <- hum_counts[,intersect(colnames(hum_counts), Hom_genes_filtered$HGNC.symbol)]
 write.csv(hum_counts, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/AIBS_human_counts.csv")
@@ -89,3 +91,74 @@ saveRDS(Seu_hum, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_pr
 row.names(mou_meta) <- mou_meta$sample_name
 Seu_mou <- CreateSeuratObject(counts = t(mou_counts), meta.data = mou_meta)
 saveRDS(Seu_mou, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/Seu_mou.rds")
+
+#### Subsample dataset (raw data V2) ####
+
+#human
+Seu_hum <- readRDS("/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/Seu_hum.rds")
+Idents(Seu_hum) <- "subclass_label"
+Seu_hum_mini <- subset(Seu_hum, downsample = 150)
+saveRDS(Seu_hum_mini, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/Seu_hum_mini.rds")
+sample_list <- unname(Seu_hum_mini$sample_name)
+
+hum_counts <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Public/AIBS_scRNAseq_2019/human/matrix.csv", row.names = 1)
+hum_counts <- hum_counts[sample_list,]
+write.csv(hum_counts, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/AIBS_human_counts_mini.csv")
+
+hum_meta <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/AIBS_human_meta.csv", row.names = 1)
+hum_meta <- hum_meta[hum_meta$sample_name %in% sample_list,]
+write.csv(hum_meta, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/AIBS_human_meta_mini.csv")
+row.names(hum_meta) <- hum_meta$sample_name
+Seu_hum_mini <- CreateSeuratObject(counts = t(hum_counts), meta.data = hum_meta)
+saveRDS(Seu_hum_mini, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/Seu_hum_mini.rds")
+
+#mouse
+Seu_mou <- readRDS("/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/Seu_mou.rds")
+Idents(Seu_mou) <- "subclass_label"
+Seu_mou_mini <- subset(Seu_mou, downsample = 150)
+Seu_mou_mini <- subset(Seu_mou_mini, downsample = 80)
+saveRDS(Seu_mou_mini, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/Seu_mou_mini.rds")
+sample_list <- unname(Seu_mou_mini$sample_name)
+
+mou_counts <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Public/AIBS_scRNAseq_2019/mouse/2020_10_24/matrix.csv", row.names = 1)
+mou_counts <- mou_counts[sample_list,]
+write.csv(mou_counts, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/AIBS_mouse_counts_mini.csv")
+
+mou_meta <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/AIBS_mouse_meta.csv", row.names = 1)
+mou_meta <- mou_meta[mou_meta$sample_name %in% sample_list,]
+write.csv(mou_meta, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/AIBS_mouse_meta_mini.csv")
+row.names(mou_meta) <- mou_meta$sample_name
+Seu_mou_mini <- CreateSeuratObject(counts = t(mou_counts), meta.data = mou_meta)
+saveRDS(Seu_mou_mini, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/Seu_mou_mini.rds")
+
+#genesum filter
+
+hum_counts <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/AIBS_human_counts_mini.csv", row.names = 1)
+hum_counts <- hum_counts[,colSums(hum_counts) != 0]
+write.csv(hum_counts, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/AIBS_human_counts_mini.csv")
+hum_meta <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/AIBS_human_meta_mini.csv", row.names = 1)
+row.names(hum_meta) <- hum_meta$sample_name
+Seu_hum_mini <- CreateSeuratObject(counts = t(hum_counts), meta.data = hum_meta)
+saveRDS(Seu_hum_mini, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/Seu_hum_mini.rds")
+
+mou_counts <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/AIBS_mouse_counts_mini.csv")
+mou_counts <- mou_counts[!is.na(mou_counts$X),] 
+row.names(mou_counts) <- mou_counts$X
+mou_counts <- mou_counts[,-1]
+mou_counts <- mou_counts[,colSums(mou_counts) != 0]
+table(colSums(mou_counts) != 0)
+write.csv(mou_counts, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/AIBS_mouse_counts_mini.csv")
+mou_counts <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/AIBS_mouse_counts_mini.csv", row.names = 1)
+mou_meta <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/AIBS_mouse_meta_mini.csv", row.names = 1)
+row.names(mou_meta) <- mou_meta$sample_name
+
+Hom_genes_filtered <- read.csv("./Homologous_genes_mouhum_filtered.csv", row.names = 1)
+test <- merge(t(mou_counts), Hom_genes_filtered[,1:2], by.x = "row.names", by.y = "MGI.symbol", all.x = T, all.y = F)
+test <- test %>% mutate(HGNC.symbol = coalesce(HGNC.symbol, Row.names))
+row.names(test) <- test$HGNC.symbol
+test <- test[,-1]
+test <- test[,-2870]
+mou_counts <- test
+  
+Seu_mou_mini <- CreateSeuratObject(counts = mou_counts, meta.data = mou_meta)
+saveRDS(Seu_mou_mini, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/Seu_mou_mini.rds")
