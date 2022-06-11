@@ -1,0 +1,25 @@
+"","Mouse_meta","Mouse_meta_exp","Mouse_cell_n","Harmonized_specific","Harmonized_general","Human_meta","Hum_meta_exp","Human_cell_n"
+"1","ACA","anterior cingulate area",5099,"Cingulate","Cingulate","CgG","(probably anterior) cingulate gyrus",6279
+"2","AI","agranular insular",1528,"Other_ctx","Other_ctx","","",NA
+"3","ALM","anterolateral motor cortex ",9667,"MO","MO","","",NA
+"4","AUD","auditory areas",1489,"AUD","AUD","A1C","primary auditory cortex (core)",6703
+"5","CLA","claustrum",1,"CLA","CLA","","",NA
+"6","ENTl","lateral entorhinal area",1594,"Hippocampal_formation","Hippocampal_formation","","",NA
+"7","ENTm","medial entorhinal area",1564,"Hippocampal_formation","Hippocampal_formation","","",NA
+"8","GU","gustatory area",1482,"Other_ctx","Other_ctx","","",NA
+"9","HIP","hippocampal region",6564,"Hippocampal_formation","Hippocampal_formation","","",NA
+"10","MOp","primary motor area",6588,"MOp","MO","M1lm","primary motor cortex (lower limb)",3371
+"11","MOp","primary motor area",6588,"MOp","MO","M1ul","primary motor cortex (upper limb)",2864
+"12","ORB","orbital area",1437,"Other_ctx","Other_ctx","","",NA
+"13","PAR-POST-PRE","parasubiculum-postsubiculum-presubiculum",1584,"Hippocampal_formation","Hippocampal_formation","","",NA
+"14","PL-ILA","prelimbic/infralimbic area (prefrontal isocortex)",1472,"Other_ctx","Other_ctx","","",NA
+"15","PTLp","posterior parietal association",1540,"Other_ctx","Other_ctx","","",NA
+"16","RSP","retrosplenial area (medial cortex)",1757,"Other_ctx","Other_ctx","","",NA
+"17","RSPv","retrosplenial area, ventral part",298,"Other_ctx","Other_ctx","","",NA
+"18","SSp","primary somatosensory area",5665,"SSp","SS","S1lm","primary somatosensory cortex (lower limb)",2805
+"19","SSp","primary somatosensory area",5665,"SSp","SS","S1ul","primary somatosensory cortex (upper limb)",3188
+"20","SSs","supplemental somatosensory area",1866,"SS","SS","","",NA
+"21","SUB-ProS","subiculum-prosubiculum",1609,"Hippocampal_formation","Hippocampal_formation","","",NA
+"22","TEa-PERI-ECT","temporal association-perirhinal-ectorhinal areas",1585,"Temporal","Temporal","MTG","middle temporal gyrus",16155
+"23","VIS","visual cortex",3386,"VIS","VIS","","",NA
+"24","VISp","primary visual area",15572,"VISp","VIS","V1C","primary visual cortex",8052

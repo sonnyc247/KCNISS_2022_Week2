@@ -54,6 +54,7 @@ Hom_genes_filtered <- Hom_genes_filtered[Hom_genes_filtered$MGI.symbol %in% coln
 Hom_genes_filtered <- Hom_genes_filtered[Hom_genes_filtered$HGNC.symbol %in% colnames(hum_counts),]
 
 write.csv(Hom_genes_filtered, "./Homologous_genes_mouhum_filtered.csv")
+Hom_genes_filtered <- read.csv("./Homologous_genes_mouhum_filtered.csv", row.names = 1)
 
 #
 #### Make Seurat objects ####
@@ -84,32 +85,39 @@ Seu_mou <- readRDS("/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_
 #
 #### Integration ####
 
-ifnb.list <- c(Seu_hum, Seu_mou)
+Seu.list <- c(Seu_hum, Seu_mou)
 
 # normalize and identify variable features for each dataset independently
-ifnb.list <- lapply(X = ifnb.list, FUN = function(x) {
-  x <- NormalizeData(x)
-  x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 2000)
+Seu.list <- lapply(X = Seu.list, FUN = function(x) {
+  #x <- NormalizeData(x)
+  x <- NormalizeData(x , normalization.method = "LogNormalize", scale.factor = 1000000)
+  x <- x[Hom_genes_filtered$HGNC.symbol,]
+  x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 5000)
 })
 
 # select features that are repeatedly variable across datasets for integration
-features <- SelectIntegrationFeatures(object.list = ifnb.list)
+features <- SelectIntegrationFeatures(object.list = Seu.list)
 
-immune.anchors <- FindIntegrationAnchors(object.list = ifnb.list, anchor.features = features)
+anchors <- FindIntegrationAnchors(object.list = Seu.list, anchor.features = features)
 
 # this command creates an 'integrated' data assay
-immune.combined <- IntegrateData(anchorset = immune.anchors)
+Seu_intd_obj <- IntegrateData(anchorset = anchors)
 
 # specify that we will perform downstream analysis on the corrected data note that the
 # original unmodified data still resides in the 'RNA' assay
-DefaultAssay(immune.combined) <- "integrated"
+DefaultAssay(Seu_intd_obj) <- "integrated"
 
 # Run the standard workflow for visualization and clustering
-immune.combined <- ScaleData(immune.combined, verbose = FALSE)
-immune.combined <- RunPCA(immune.combined, npcs = 30, verbose = FALSE)
-immune.combined <- RunUMAP(immune.combined, reduction = "pca", dims = 1:30)
-immune.combined <- FindNeighbors(immune.combined, reduction = "pca", dims = 1:30)
-immune.combined <- FindClusters(immune.combined, resolution = 0.5)
+Seu_intd_obj <- ScaleData(Seu_intd_obj, verbose = FALSE)
+Seu_intd_obj <- RunPCA(Seu_intd_obj, npcs = 30, verbose = FALSE)
+Seu_intd_obj <- RunUMAP(Seu_intd_obj, reduction = "pca", dims = 1:30)
+Seu_intd_obj <- FindNeighbors(Seu_intd_obj, reduction = "pca", dims = 1:30)
+Seu_intd_obj <- FindClusters(Seu_intd_obj, resolution = 0.5)
 
-DimPlot(immune.combined, reduction = "umap", group.by = "class_label")
-saveRDS(immune.combined, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/First_Integration.rds")
+plot2 <- DimPlot(Seu_intd_obj, reduction = "umap", group.by = "class_label")
+plot1 <- DimPlot(Seu_intd_obj, reduction = "umap", group.by = "species")
+plot1 + plot2
+DimPlot(Seu_intd_obj, reduction = "umap", group.by = "subclass_label")
+saveRDS(Seu_intd_obj, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/Second_Integration.rds")
+
+Seu_intd_obj <- readRDS("/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/First_Integration.rds")
