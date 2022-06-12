@@ -83,7 +83,7 @@ Seu_mou <- CreateSeuratObject(counts = mou_counts, meta.data = mou_meta)
 Seu_mou <- readRDS("/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/Seu_mou_mini.rds")
 
 #
-#### Integration ####
+#### Integration + initial analysis ####
 
 Seu.list <- c(Seu_hum, Seu_mou)
 
@@ -114,10 +114,43 @@ Seu_intd_obj <- RunUMAP(Seu_intd_obj, reduction = "pca", dims = 1:30)
 Seu_intd_obj <- FindNeighbors(Seu_intd_obj, reduction = "pca", dims = 1:30)
 Seu_intd_obj <- FindClusters(Seu_intd_obj, resolution = 0.5)
 
+# view our integration
 plot2 <- DimPlot(Seu_intd_obj, reduction = "umap", group.by = "class_label")
 plot1 <- DimPlot(Seu_intd_obj, reduction = "umap", group.by = "species")
 plot1 + plot2
-DimPlot(Seu_intd_obj, reduction = "umap", group.by = "subclass_label")
+
 saveRDS(Seu_intd_obj, "/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/Second_Integration.rds")
+Seu_intd_obj <- readRDS("/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/First_Integration.rds")
+
+#try to make sense of our clusters
+unique(Seu_intd_obj$seurat_clusters)
+Seu_intd_obj@meta.data$species_subclass <- paste0(Seu_intd_obj@meta.data$species, "_", Seu_intd_obj@meta.data$subclass_label)
+conf_mtx <- as.data.frame.matrix(table(Seu_intd_obj$species_subclass, Seu_intd_obj$seurat_clusters))
+DimPlot(Seu_intd_obj, reduction = "umap", group.by = "seurat_clusters")
+FeaturePlot(Seu_intd_obj, features = c("SST", "VIP", "PVALB"))
+
+#
+#### More (test) analyses ####
 
 Seu_intd_obj <- readRDS("/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/First_Integration.rds")
+
+#DE
+t.cells <- subset(immune.combined, idents = "CD4 Naive T")
+Idents(t.cells) <- "stim"
+avg.t.cells <- as.data.frame(log1p(AverageExpression(t.cells, verbose = FALSE)$RNA))
+avg.t.cells$gene <- rownames(avg.t.cells)
+
+cd14.mono <- subset(immune.combined, idents = "CD14 Mono")
+Idents(cd14.mono) <- "stim"
+avg.cd14.mono <- as.data.frame(log1p(AverageExpression(cd14.mono, verbose = FALSE)$RNA))
+avg.cd14.mono$gene <- rownames(avg.cd14.mono)
+
+genes.to.label = c("ISG15", "LY6E", "IFI6", "ISG20", "MX1", "IFIT2", "IFIT1", "CXCL10", "CCL8")
+p1 <- ggplot(avg.t.cells, aes(CTRL, STIM)) + geom_point() + ggtitle("CD4 Naive T Cells")
+p1 <- LabelPoints(plot = p1, points = genes.to.label, repel = TRUE)
+p2 <- ggplot(avg.cd14.mono, aes(CTRL, STIM)) + geom_point() + ggtitle("CD14 Monocytes")
+p2 <- LabelPoints(plot = p2, points = genes.to.label, repel = TRUE)
+
+FeaturePlot(immune.combined, features = c("CD3D", "GNLY", "IFI6"), split.by = "stim", max.cutoff = 3,
+            cols = c("grey", "red"))
+p1 + p2
