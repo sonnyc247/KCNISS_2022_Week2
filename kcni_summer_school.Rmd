@@ -1,0 +1,440 @@
+---
+title: "KCNI Summer School: Week 2"
+output: html_document
+---
+
+# Resources
+Dataset integration & related analyses:
+https://satijalab.org/seurat/articles/integration_introduction.html
+
+Differential expression testing:
+https://satijalab.org/seurat/articles/de_vignette.html
+
+Data visualization:
+https://satijalab.org/seurat/articles/visualization_vignette.html
+
+# Processing
+## Setup
+### Load packages
+```{r}
+#install.packages("tidyverse")
+library(tidyverse)
+
+#install.packages("Seurat")
+library(Seurat)
+
+#install.packages('BiocManager')
+#BiocManager::install('limma')
+library(limma)
+
+#install.packages("metap")
+library(metap)
+
+#BiocManager::install('multtest')
+library(multtest)
+
+library(cowplot)
+```
+
+## Analysis
+### Human DE (without integration)
+```{r}
+## load metadata and count matrix
+hum_meta <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2022_week2proj/AIBS_human_meta_mini.csv", row.names = 1)
+hum_counts <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2022_week2proj/AIBS_human_counts_mini.csv", row.names = 1)
+row.names(hum_meta) <- hum_meta$sample_name
+
+# t(hum_counts) transposes so that we have rows as genes and columns as samples as they should be for Seurat
+# turns into matrix which can only contain numbers
+
+Seu_hum <- CreateSeuratObject(counts = t(hum_counts), meta.data = hum_meta)
+rm(hum_counts, hum_meta) # removing large matrices now that we have Seurat obj
+```
+
+S3 vs. S4 objects
+* Seurat obj is S4, S4s much more defined, must contain and can only contain certain things which are formally named
+* informal dataframes and lists like metadata stored in S3
+
+Move through data structure with $ or @ (can use tab completion to know which is appropriate)
+
+```{r}
+Idents(Seu_hum) #interacts with active.ident part of seurat obj, by default without providing orig.ident, pulls string before _
+Seu_hum@active.ident #same as above
+```
+
+### Processing human seurat obj
+No need with Allen Institute cells, but should plot QC metrics (like nfeatures_RNA) as histogram, should see bimodal distribution, can designate one group as "bad quality"
+
+Here, putting results in data section of the Seurat object, not overriding any data because using Seurat functions
+```{r}
+Seu_hum <- NormalizeData(Seu_hum, normalization.method = "LogNormalize", scale.factor = 1000000) #changing scale.factor to mil
+Seu_hum <- FindVariableFeatures(Seu_hum, selection.method = "vst", nfeatures = 2000) #should see effect of changing nfeatures
+Seu_hum <- ScaleData(Seu_hum, verbose = FALSE)
+Seu_hum <- RunPCA(Seu_hum, npcs = 50, verbose = FALSE) #50 is default, we could choose something smaller based on ElbowPlot
+Seu_hum <- FindNeighbors(Seu_hum, reduction = "pca", dims = 1:20)
+Seu_hum <- FindClusters(Seu_hum, resolution = 0.5) #nm.method and annoy.metric have drastic effects on cluster creation
+Seu_hum <- RunUMAP(Seu_hum, reduction = "pca", dims = 1:20)
+```
+
+```{r}
+Seu_hum@assays$RNA@data #look at normalized data
+Seu_hum@assays$RNA@var.features #look at most variable features
+ElbowPlot(Seu_hum, ndims=50) #see SD of each PC, shows how much explained, use to see how many PC needed to best explain data
+#cut at the elbow (can argue where cutoff is, might choose 7 or 20)
+table(Seu_hum$seurat_clusters) #tells you number of cells in each cluster
+table(Seu_hum$seurat_clusters, Seu_hum$class_label) #number of cells per class per cluster
+table(Seu_hum$seurat_clusters, Seu_hum$subclass_label) #number of cells per subclass per cluster
+```
+
+```{r}
+#visualize our clustering
+DimPlot(Seu_hum, reduction = "umap", group.by = "subclass_label", label=TRUE)
+
+DimPlot(Seu_hum, reduction = "umap", group.by = "seurat_clusters", label=TRUE, repel=TRUE)
+```
+
+```{r}
+Idents(Seu_hum) <- "seurat_clusters"
+
+#genes to distinguish cluster 8 from 3
+cluster_8_v_3 <- FindMarkers(Seu_hum, ident.1 = 8, ident.2 = 3, logfc.threshold = log(2), min.pct = 0.50)
+
+#genes to distinguish cluster 8, 2, or 13 from all other clusters
+cluster_8_v_all <- FindMarkers(Seu_hum, ident.1 = 8, logfc.threshold = log(2), min.pct = 0.50)
+cluster_2_v_all <- FindMarkers(Seu_hum, ident.1 = 2, logfc.threshold = log(2), min.pct = 0.50)
+cluster_13_v_all <- FindMarkers(Seu_hum, ident.1 = 2, logfc.threshold = log(2), min.pct = 0.50)
+
+#finding marker genes for all clusters, alternative to running one-by-one as done for 8, 2, 13
+all_clusters <- FindAllMarkers(Seu_hum, logfc.threshold = log(2), min.pct = 0.50)
+
+#taking a look at most significantly DE marker genes
+cluster_8_v_3  %>% 
+  arrange(p_val_adj)
+cluster_8_v_all %>% 
+  arrange(p_val_adj)
+cluster_2_v_all %>% 
+  arrange(p_val_adj)
+
+#two different ways of looking for a specific gene in the output dataframes, where genes are rownames
+cluster_2_v_all %>% 
+  filter(row.names(.)=="GRIN1")
+
+cluster_2_v_all %>% 
+  rownames_to_column("gene_name") %>% 
+  filter(gene_name=="GRIN1")
+```
+
+```{r}
+#making new metadata column to see if any sex differences for the same cell type
+Seu_hum@meta.data <- Seu_hum@meta.data %>% 
+  mutate(sex_subclass = paste(donor_sex_label, subclass_label, sep="_"))
+
+Idents(Seu_hum) <- "sex_subclass" #setting this new column as our active identity
+
+unique(Idents(Seu_hum)) #seeing what our options are for making comparisons
+
+#finding genes that are DE in female-derived microglia vs male-derived
+F_microglia_vs_M_microglia <- FindMarkers(Seu_hum, ident.1 = "F_Microglia", ident.2 = "M_Microglia", 
+                                          logfc.threshold = log(2), min.pct = 0.25)
+
+F_microglia_vs_M_microglia %>% 
+  arrange(p_val_adj)
+```
+
+```{r}
+table(Seu_hum$sex_subclass) #see how many cells we have for each sex+subclass combo
+```
+
+```{r}
+#checking if a gene is present in our counts matrix
+Seu_hum@assays$RNA@counts["GFAP",]
+```
+
+```{r}
+#getting top marker genes for distinguishing cluster 8 cells, saving to plot below
+features <- cluster_8_v_all %>% 
+  arrange(p_val_adj) %>% 
+  head(n=6) %>% 
+  row.names()
+```
+
+Violin Plot
+```{r}
+Idents(Seu_hum) <- "seurat_clusters"
+VlnPlot(Seu_hum, features = features)
+```
+
+Feature Plot
+```{r}
+FeaturePlot(Seu_hum, features = features)
+```
+
+Dot Plot
+```{r}
+DotPlot(Seu_hum, features = features) + RotatedAxis()
+```
+
+Heat Map
+```{r}
+DoHeatmap(subset(Seu_hum, downsample = 100), features = features, size = 3, slot="data") +
+  scale_fill_viridis_c()
+```
+
+### Integration
+#### Human
+```{r}
+## load metadata and count matrix
+hum_meta <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2022_week2proj/AIBS_human_meta_mini.csv", row.names = 1)
+hum_counts <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2022_week2proj/AIBS_human_counts_mini.csv", row.names = 1)
+row.names(hum_meta) <- hum_meta$sample_name
+
+Seu_hum <- CreateSeuratObject(counts = t(hum_counts), meta.data = hum_meta)
+rm(hum_counts) # removing large counts matrix now that we have Seurat obj
+```
+
+#### Mouse
+```{r}
+# (with gene name conversion for homologous genes)
+mou_meta <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2022_week2proj/AIBS_mouse_meta_mini.csv", row.names = 1)
+mou_counts <- read.csv("/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2022_week2proj/AIBS_mouse_counts_mini.csv", row.names = 1)
+row.names(mou_meta) <- mou_meta$sample_name
+```
+
+```{r}
+#download from https://github.com/sonnyc247/KCNISS_2022_Week2/blob/main/Homologous_genes_mouhum_filtered.csv
+Hom_genes_filtered <- read.csv("Homologous_genes_mouhum_filtered.csv", row.names = 1)
+test <- merge(t(mou_counts), Hom_genes_filtered[,1:2], 
+              by.x = "row.names", by.y = "MGI.symbol", all.x = T, all.y = F)
+head(test)[2871] #seeing that human gene symbols are now present in the last column
+```
+
+```{r}
+test <- test %>% 
+  mutate(HGNC.symbol = coalesce(HGNC.symbol, Row.names))
+
+head(test)[2871] #checking what has changed (where human gene symbols were absent, mouse gene symbols were filled in--coalesce is good for using one vector to fill in empty spots in another vector)
+```
+
+```{r}
+row.names(test) <- test$HGNC.symbol
+head(test)
+```
+
+```{r}
+test <- test[,-1] #removing mouse gene symbols column
+test <- test[,-2870] #removing human gene symbols column as these are now rownames
+mou_counts <- test #renaming our dataframe to be more recognizable
+rm(test) #removing the temporary dataframe
+head(mou_counts) 
+```
+
+```{r}
+Seu_mou <- CreateSeuratObject(counts = mou_counts, meta.data = mou_meta)
+rm(mou_counts) # removing large counts matrix now that we have Seurat obj
+saveRDS(Seu_mou, "seu_mouhu_map.rds")
+```
+
+### Integration
+#### Normal method
+```{r}
+Seu.list <- c(Seu_hum, Seu_mou)
+rm(Seu_mou, Seu_hum, Hom_genes_filtered) # freeing up space, seurat objects stored above
+
+# normalize and identify variable features for each dataset independently
+Seu.list <- lapply(X = Seu.list, FUN = function(x) {
+  #x <- NormalizeData(x)
+  x <- NormalizeData(x, normalization.method = "LogNormalize", scale.factor = 1000000)
+  x <- x[Hom_genes_filtered$HGNC.symbol,]
+  x <- FindVariableFeatures(x, selection.method = "vst", nfeatures = 3000)
+})
+
+# select features that are repeatedly variable across datasets for integration
+features <- SelectIntegrationFeatures(object.list = Seu.list)
+
+# controlling for differences between within-dataset variabilities
+anchors <- FindIntegrationAnchors(object.list = Seu.list, anchor.features = features)
+
+# this command creates an 'integrated' data assay
+Seu_intd_obj <- IntegrateData(anchorset = anchors)
+
+rm(Hom_genes_filtered)
+```
+
+#### Using SCTransform method
+Alternative to above, uses modified normalization method based on regularized negative binomial regression 
+```{r}
+Seu.list <- c(Seu_hum, Seu_mou)
+rm(Seu_mou, Seu_hum) # saving space
+
+# alternative to above using SCTransform
+#Seu.list <- lapply(X = Seu.list, FUN = SCTransform)
+Seu.list <- lapply(X = Seu.list, FUN = function(x) {
+  x <- SCTransform(x)
+  x <- x[Hom_genes_filtered$HGNC.symbol,]
+})
+
+# select features that are repeatedly variable across datasets for integration
+features <- SelectIntegrationFeatures(object.list = Seu.list, nfeatures=5000)
+
+Seu.list <- PrepSCTIntegration(object.list = Seu.list, anchor.features = features)
+
+anchors <- FindIntegrationAnchors(object.list = Seu.list, normalization.method = "SCT",
+                                  anchor.features = features)
+
+# this command creates an 'integrated' data assay
+Seu_intd_obj <- IntegrateData(anchorset = anchors, normalization.method = "SCT")
+
+rm(Hom_genes_filtered)
+```
+
+### Initial analysis
+```{r}
+# specify that we will perform downstream analysis on the corrected data, note that the original unmodified data still resides in the 'RNA' assay
+DefaultAssay(Seu_intd_obj) <- "integrated"
+
+# Run the standard workflow for visualization and clustering
+Seu_intd_obj <- ScaleData(Seu_intd_obj, verbose = FALSE)
+```
+
+```{r}
+Seu_intd_obj <- RunPCA(Seu_intd_obj, npcs = 30, verbose = FALSE)
+ElbowPlot(Seu_intd_obj, ndims = 30)
+```
+
+```{r}
+Seu_intd_obj <- FindNeighbors(Seu_intd_obj, reduction = "pca", dims = 1:30)
+```
+
+```{r}
+Seu_intd_obj <- FindClusters(Seu_intd_obj, resolution = 0.5)
+
+# Save Seurat obj to be loaded to skip earlier steps when restarting R
+#saveRDS(Seu_intd_obj, "Seu_Integration.rds")
+#Seu_intd_obj <- readRDS("Seu_Integration.rds")
+```
+
+```{r}
+# Check out how many cells placed into each cluster
+table(Seu_intd_obj$seurat_clusters)
+```
+
+```{r}
+Seu_intd_obj <- RunUMAP(Seu_intd_obj, reduction = "pca", dims = 1:30)
+```
+
+### Visualization
+```{r}
+DimPlot(Seu_intd_obj, reduction="umap", label=TRUE)
+```
+
+```{r}
+# view our integration
+plot2 <- DimPlot(Seu_intd_obj, reduction = "umap", group.by = "class_label")
+plot1 <- DimPlot(Seu_intd_obj, reduction = "umap", group.by = "species")
+plot1 + plot2
+```
+
+```{r}
+# try to make sense of our clusters
+# unique(Seu_intd_obj$seurat_clusters)
+Seu_intd_obj@meta.data$species_subclass <- paste0(Seu_intd_obj@meta.data$species, "_", Seu_intd_obj@meta.data$subclass_label)
+## examine number of cells of each species+subclass combination assigned to each cluster
+conf_mtx <- as.data.frame.matrix(table(Seu_intd_obj$species_subclass, Seu_intd_obj$seurat_clusters))
+```
+
+```{r}
+# more visualizations
+DimPlot(Seu_intd_obj, reduction = "umap", group.by = "subclass_label", split.by = "species", label=TRUE)
+
+## highlighting cell types
+DimPlot(Seu_intd_obj, reduction = "umap", group.by = "subclass_label",
+        cells.highlight = list(Seu_intd_obj@meta.data %>% 
+          filter(subclass_label %in% c("Astro", "Astrocyte")) %>% 
+                   row.names(.),
+          Seu_intd_obj@meta.data %>% 
+          filter(subclass_label %in% c("SST", "Sst")) %>% 
+                   row.names(.)),
+        cols.highlight = c("slateblue", "cadetblue"))
+
+## showing gene expression in clusters, differences between species
+FeaturePlot(Seu_intd_obj, features = c("SST", "VIP", "PVALB"), split.by="species")
+```
+
+### Find conserved markers
+Can use these results to annotate clusters as specific cell types (look with FeaturePlot, rename with RenameIdents)
+
+This takes a long time, would recommend using parallelization here
+
+```{r}
+# For performing differential expression after integration, we switch back to the original data
+DefaultAssay(Seu_intd_obj) <- "RNA"
+```
+
+Parallel processing should only be attempted if you think your computer can handle it—if not, skip this chunk and proceed
+```{r}
+plan("multiprocess", workers = 4) # changes from sequential to parallel
+```
+
+Here, cluster 9 cells are astrocytes
+```{r}
+Idents(Seu_intd_obj) <- "seurat_clusters"
+
+cluster_9_markers <- FindConservedMarkers(Seu_intd_obj, ident.1 = 9, grouping.var = "species", verbose = FALSE)
+
+# showing most significant results first
+cluster_9_markers %>% 
+  filter(minimump_p_val<0.05) %>% 
+  arrange(minimump_p_val)
+```
+
+#### Using this output to play around with ggplot
+```{r}
+# making some fake categorical variables
+c9_ggplot_test <- cluster_9_markers %>% 
+  mutate(fake_subclass = if_else(human_pct.1>0.5, "sst", "pvalb")) %>% 
+  mutate(fake_sex = if_else(mouse_pct.1<0.2, "M", "F")) %>% 
+  pivot_longer(cols = c(human_p_val, mouse_p_val), names_to = 'species', values_to = 'p_val')
+
+# try geom_point, geom_boxplot, geom_histogram, geom_violin
+ggplot(c9_ggplot_test, aes(x=human_avg_log2FC, y=mouse_avg_log2FC, colour=fake_sex)) + 
+  geom_point(alpha=0.1) +
+  geom_smooth(colour="black", method = "lm", se=FALSE) +
+  scale_color_manual(values = c("green", "blue")) + 
+  facet_wrap(~fake_sex) +
+  theme_classic()
+```
+
+### Differential expression
+Recall that when using "integrated" values, fold change values cannot be directly interpreted as integrated values have become unitless
+```{r}
+DefaultAssay(Seu_intd_obj) <- "integrated"
+
+# to compare a cluster between species, must make metadata column combining these traits and set as active identity
+Seu_intd_obj$cluster_species <- paste(Idents(Seu_intd_obj), Seu_intd_obj$species, sep = "_")
+Idents(Seu_intd_obj) <- "cluster_species"
+cluster_9_species_de <- FindMarkers(Seu_intd_obj, ident.1 = "9_human", ident.2 = "9_mouse", verbose = FALSE)
+
+# top DEG where human expresses more
+c9_in_hum <- cluster_9_species_de %>% 
+  filter(p_val_adj < 0.05) %>% 
+  filter(pct.1>0.5) %>% 
+  arrange(desc(avg_log2FC)) %>% 
+  head(n=5) %>% 
+  row.names()
+
+# top DEG where mouse expresses more
+c_9_in_mou <- cluster_9_species_de %>% 
+  filter(p_val_adj < 0.05) %>% 
+  filter(pct.2>0.5) %>% 
+  arrange(avg_log2FC)%>% 
+  head(n=5) %>% 
+  row.names()
+```
+
+```{r}
+# comparing expression before and after corrections involved in integration
+DefaultAssay(Seu_intd_obj) <- "RNA"
+DotPlot(Seu_intd_obj, features = c(c9_in_hum, c_9_in_mou), idents=9, group.by = "species") + RotatedAxis()
+DefaultAssay(Seu_intd_obj) <- "integrated"
+DotPlot(Seu_intd_obj, features = c(c9_in_hum, c_9_in_mou), idents=9, group.by = "species") + RotatedAxis()
+```
