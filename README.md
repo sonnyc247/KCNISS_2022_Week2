@@ -22,7 +22,7 @@
 ## Resources
 
 Dataset information:
-* [Region mapping between species](https://github.com/sonnyc247/KCNISS_2022_Week2/blob/main/Region_Mapping.csv)
+* [Region mapping between species](https://github.com/sonnyc247/KCNISS_2022_Week2/blob/main/Data/Region_Mapping.csv)
     * Includes number of cells available within each region for full human and mouse datasets
 
 Seurat tutorials:
@@ -31,7 +31,7 @@ Seurat tutorials:
 * [Data visualization methods](https://satijalab.org/seurat/articles/visualization_vignette.html)
 
 Getting started:
-1. Preprocessing completed using code [here](https://github.com/sonnyc247/KCNISS_2022_Week2/blob/main/Preprocessing.R)
+1. Preprocessing completed using code [here](https://github.com/sonnyc247/KCNISS_2022_Week2/blob/main/Code/Preprocessing.R)
     * Finding homologous genes between species, downsampling large datasets, filtering out undetected genes
-2. [Initial Seurat analysis](https://github.com/sonnyc247/KCNISS_2022_Week2/blob/main/Processing.R)
+2. [Initial Seurat analysis](https://github.com/sonnyc247/KCNISS_2022_Week2/blob/main/Code/Processing.R)
     * Dataset integration, *de novo* clustering, visualization
