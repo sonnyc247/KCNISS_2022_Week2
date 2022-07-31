@@ -1,5 +1,7 @@
 library(Seurat)
 library(biomaRt)
+library(dplyr)
+library(ggplot2)
 
 #### gene homology (modified from https://www.r-bloggers.com/2016/10/converting-mouse-to-human-gene-names-with-biomart-package/) ####
 
@@ -129,28 +131,50 @@ conf_mtx <- as.data.frame.matrix(table(Seu_intd_obj$species_subclass, Seu_intd_o
 DimPlot(Seu_intd_obj, reduction = "umap", group.by = "seurat_clusters")
 FeaturePlot(Seu_intd_obj, features = c("SST", "VIP", "PVALB"))
 
+conf_mtx <- read.csv("./conf_mtx.csv", row.names = 1)
+
+heatmap <- heatmap(as.matrix(conf_mtx))
+orig_id_order <- row.names(conf_mtx)[heatmap$rowInd]
+denovo_id_order <- names(conf_mtx)[heatmap$colInd]
+
+conf_mtx <- tibble::rownames_to_column(conf_mtx,var = "original_group")
+conf_mtx_gathered <- tidyr::gather(conf_mtx, value = "cells", key = "denovo_cluster", 2:28)
+conf_mtx_gathered$original_group <- factor(conf_mtx_gathered$original_group, levels = orig_id_order)
+conf_mtx_gathered$denovo_cluster <- factor(conf_mtx_gathered$denovo_cluster, levels = denovo_id_order)
+
+ggplot(conf_mtx_gathered) +
+  geom_tile(aes(y = original_group, x = denovo_cluster, fill = cells)) +
+  scale_fill_gradientn(limits = c(0,150),
+                       colours = c("white", "red")) +
+  labs(y = "Original cell type", x = "De Novo cluster", fill = "Number of cells")
+
 #
 #### More (test) analyses ####
 
 Seu_intd_obj <- readRDS("/external/rprshnas01/netdata_kcni/stlab/Intralab_collab_scc_projects/KCNISS2002_week2proj/First_Integration.rds")
 
-#DE
-t.cells <- subset(immune.combined, idents = "CD4 Naive T")
-Idents(t.cells) <- "stim"
-avg.t.cells <- as.data.frame(log1p(AverageExpression(t.cells, verbose = FALSE)$RNA))
-avg.t.cells$gene <- rownames(avg.t.cells)
+### species specific DE
 
-cd14.mono <- subset(immune.combined, idents = "CD14 Mono")
-Idents(cd14.mono) <- "stim"
-avg.cd14.mono <- as.data.frame(log1p(AverageExpression(cd14.mono, verbose = FALSE)$RNA))
-avg.cd14.mono$gene <- rownames(avg.cd14.mono)
+Seu_intd_obj@meta.data$species_denovoClus <- paste0(Seu_intd_obj@meta.data$species, "_", Seu_intd_obj@meta.data$seurat_clusters)
+Idents(Seu_intd_obj) <- "species_denovoClus"
+#DefaultAssay(Seu_intd_obj) <- "RNA"
+DefaultAssay(Seu_intd_obj) <- "integrated"
+DE_Genes2 <- FindMarkers(Seu_intd_obj, 
+                        ident.1 = "human_8", 
+                        ident.2 = "mouse_8", 
+                        min.diff.pct = 0.25)
 
-genes.to.label = c("ISG15", "LY6E", "IFI6", "ISG20", "MX1", "IFIT2", "IFIT1", "CXCL10", "CCL8")
-p1 <- ggplot(avg.t.cells, aes(CTRL, STIM)) + geom_point() + ggtitle("CD4 Naive T Cells")
-p1 <- LabelPoints(plot = p1, points = genes.to.label, repel = TRUE)
-p2 <- ggplot(avg.cd14.mono, aes(CTRL, STIM)) + geom_point() + ggtitle("CD14 Monocytes")
-p2 <- LabelPoints(plot = p2, points = genes.to.label, repel = TRUE)
+# plot
+Idents(Seu_intd_obj) <- "seurat_clusters"
+cluster8_pvalb <- subset(Seu_intd_obj, idents = "8")
+DefaultAssay(cluster8_pvalb) <- "integrated"
+Idents(cluster8_pvalb) <- "species"
+avg.pvalb <- as.data.frame(log1p(AverageExpression(cluster8_pvalb)$integrated))
+avg.pvalb$gene <- rownames(avg.pvalb)
 
-FeaturePlot(immune.combined, features = c("CD3D", "GNLY", "IFI6"), split.by = "stim", max.cutoff = 3,
-            cols = c("grey", "red"))
-p1 + p2
+genes.to.label = c("TRPM3", "SST", "TH", "COX3")
+genes.to.label = rownames(DE_Genes)
+p1 <- ggplot(avg.pvalb, aes(human, mouse)) + geom_point(size = 1, alpha = 0.1) + ggtitle("pvalb")
+p1 <- LabelPoints(plot = p1, points = genes.to.label, repel = 10)
+p1
+
